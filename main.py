@@ -21,8 +21,9 @@ app = Flask(__name__)
 os.makedirs(output_folder, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s', datefmt='%H:%M:%S')
 
-username = ""
-password = ""
+username = os.getenv("INSTA_USERNAME")
+password = os.getenv("INSTA_PASSWORD")
+
 
 cl = Client()
 
