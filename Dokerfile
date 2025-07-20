@@ -15,5 +15,5 @@ RUN pip install --no-cache-dir flask yt_dlp instagrapi gunicorn
 # Expose port
 EXPOSE 8080
 
-# Run the app
-CMD ["python", "app.py"]
+# Run the app with gunicorn
+CMD ["gunicorn", "-w", "1", "-b", "0.0.0.0:8080", "app:app"]
