@@ -3,3 +3,4 @@ instagrapi
 pytube
 yt_dlp
 moviepy>=1.0.3
+gunicorn==20.1.0
