@@ -1,110 +1,99 @@
-# app.py
-import yt_dlp
-import time
 import os
-import logging
+import time
+import json
+import shutil
+from pytube import Playlist
 from instagrapi import Client
-from flask import Flask
-import threading
+import yt_dlp
 
-# ========== Configuration ==========
-playlist_url = "https://youtube.com/playlist?list=PLzlOHuvgTpSY4_88tPkqV9BKMt-J2Ivnm&si=zXefeH20MrI7dN6f"
-wait_seconds = 5 * 60 * 60
-output_folder = "downloads"
-video_path = os.path.join(output_folder, "reel.mp4")
-uploaded_file = "uploaded_titles.txt"
-session_file = "insta_session.json"
-caption = "Follow For Such Amazing Content 😋 #Viral #Like #Follow #Meme... This Reel Is Uploaded Via Automation If You Wanna Learn Then Dm Me Asap"
+# === SETTINGS ===
+USERNAME = os.environ.get("INSTA_USER")
+PASSWORD = os.environ.get("INSTA_PASS")
+PLAYLIST_URL = os.environ.get("YT_PLAYLIST") or "https://youtube.com/playlist?list=PLzlOHuvgTpSY4_88tPkqV9BKMt-J2Ivnm&si=zXefeH20MrI7dN6f"  # replace with actual default if needed
+SESSION_FILE = "insta_session.json"
+VIDEO_FILE = "reel.mp4"
+THUMBNAIL_FILE = VIDEO_FILE + ".jpg"
+DELAY_MINUTES = 5
 
-# ========== Setup ==========
-app = Flask(__name__)
-os.makedirs(output_folder, exist_ok=True)
-logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s', datefmt='%H:%M:%S')
-
-username = os.getenv("INSTA_USERNAME")
-password = os.getenv("INSTA_PASSWORD")
+# === UTILS ===
+def clean_old_files():
+    for file in [VIDEO_FILE, THUMBNAIL_FILE]:
+        if os.path.exists(file):
+            os.remove(file)
 
 
-cl = Client()
-
-if os.path.exists(session_file):
-    cl.load_settings(session_file)
-    try:
-        cl.login(username, password)
-        logging.info("✅ Session restored.")
-    except:
-        cl.login(username, password)
-        cl.dump_settings(session_file)
-else:
-    cl.login(username, password)
-    cl.dump_settings(session_file)
-
-def get_uploaded_titles():
-    if not os.path.exists(uploaded_file):
-        return set()
-    with open(uploaded_file, "r", encoding='utf-8') as f:
-        return set(line.strip() for line in f)
-
-def mark_as_uploaded(title):
-    with open(uploaded_file, "a", encoding='utf-8') as f:
-        f.write(title + "\n")
-
-def download_video(url):
-    if os.path.exists(video_path):
-        os.remove(video_path)
-    if os.path.exists("reel.mp4.jpg"):
-        os.remove("reel.mp4.jpg")
-
+def download_video(url, output_path=VIDEO_FILE):
     ydl_opts = {
-        'outtmpl': video_path,
+        'outtmpl': output_path,
         'quiet': True,
-        'format': 'mp4/best',
+        'format': 'mp4/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best',
+        'merge_output_format': 'mp4',
         'noplaylist': True,
+        'user_agent': 'Mozilla/5.0',
     }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+        return True
+    except Exception as e:
+        print(f"❌ Failed to download {url}: {e}")
+        return False
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        return ydl.extract_info(url, download=True)
 
-def background_job():
-    extract_opts = {'extract_flat': True, 'quiet': True, 'skip_download': True}
+def upload_to_instagram(video_path, caption, cl):
+    try:
+        print(f"\n🚀 Uploading to Instagram...")
+        cl.clip_upload(video_path, caption=caption)
+        print("✅ Uploaded")
+        return True
+    except Exception as e:
+        print(f"❌ Failed: {caption} — {e}")
+        return False
+
+
+# === MAIN ===
+def main():
+    cl = Client()
+    if os.path.exists(SESSION_FILE):
+        try:
+            cl.load_settings(SESSION_FILE)
+            cl.login(USERNAME, PASSWORD)
+        except:
+            print("🔐 Session invalid, re-login required")
+            cl.login(USERNAME, PASSWORD)
+            cl.dump_settings(SESSION_FILE)
+    else:
+        cl.login(USERNAME, PASSWORD)
+        cl.dump_settings(SESSION_FILE)
+
+    uploaded = set()
 
     while True:
-        uploaded_titles = get_uploaded_titles()
+        print("\n🔁 Checking playlist...")
+        playlist = Playlist(PLAYLIST_URL)
 
-        with yt_dlp.YoutubeDL(extract_opts) as ydl:
-            playlist = ydl.extract_info(playlist_url, download=False)
-            videos = playlist.get('entries', [])
+        for video in playlist.videos:
+            title = video.title
+            url = video.watch_url
 
-        for entry in videos:
-            title = entry.get('title')
-            video_id = entry.get('id')
-
-            if not title or not video_id or title in uploaded_titles:
+            if url in uploaded:
                 continue
 
-            video_url = f"https://www.youtube.com/watch?v={video_id}"
+            print(f"\n📥 Downloading: {title}")
+            clean_old_files()
+            success = download_video(url)
 
-            try:
-                logging.info(f"📥 Downloading: {title}")
-                info = download_video(video_url)
+            if success:
+                uploaded.add(url)
+                uploaded.add(video.video_id)
+                upload_to_instagram(VIDEO_FILE, title, cl)
+                clean_old_files()
+            else:
+                print(f"⏩ Skipping due to download failure: {title}")
 
-                logging.info("🚀 Uploading to Instagram...")
-                cl.clip_upload(video_path, caption=caption)
-                logging.info(f"✅ Uploaded: {title}")
+        print(f"⏳ Waiting {DELAY_MINUTES} minutes before checking again...")
+        time.sleep(DELAY_MINUTES * 60)
 
-                mark_as_uploaded(title)
-                break  # only upload 1 at a time, then wait
 
-            except Exception as e:
-                logging.error(f"❌ Error uploading {title}: {e}")
-
-        logging.info(f"⏳ Sleeping {wait_seconds // 3600}h...")
-        time.sleep(wait_seconds)
-
-@app.route("/")
-def home():
-    return "🤖 Instagram Auto Upload Bot Running!"
-
-if __name__ == "__main__":
-    threading.Thread(target=background_job, daemon=True).start()
-    app.run(host="0.0.0.0", port=8080)
+if __name__ == '__main__':
+    main()
