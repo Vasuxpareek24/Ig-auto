@@ -2,3 +2,4 @@ Flask
 instagrapi
 pytube
 yt_dlp
+moviepy>=1.0.3
