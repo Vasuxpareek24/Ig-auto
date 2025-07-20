@@ -85,7 +85,7 @@ def download_video(url):
     cleanup_downloads()
     ydl_opts = {
         'outtmpl': video_path,
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best' if ffmpeg_available else 'best[ext=mp4]',
+        'format': 'bestvideo[filesize<50M][ext=mp4]+bestaudio[ext=m4a]/best[filesize<50M][ext=mp4]/best' if ffmpeg_available else 'best[filesize<50M][ext=mp4]',
         'merge_output_format': 'mp4' if ffmpeg_available else None,
         'quiet': False,  # Verbose output for debugging
         'noplaylist': True,
