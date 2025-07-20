@@ -14,7 +14,7 @@ output_folder = "downloads"
 video_path = os.path.join(output_folder, "reel.mp4")
 uploaded_file = "uploaded_titles.txt"
 session_file = "insta_session.json"
-caption = "Follow For Such Amazing Content 😋 #Viral #Like #Follow #Meme..."
+caption = "Follow For Such Amazing Content 😋 #Viral #Like #Follow #Meme... This Reel Is Uploaded Via Automation If You Wanna Learn Then Dm Me Asap"
 
 # ========== Setup ==========
 app = Flask(__name__)
