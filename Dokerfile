@@ -10,10 +10,10 @@ WORKDIR /app
 COPY . .
 
 # Install Python dependencies
-RUN pip install --no-cache-dir flask yt_dlp instagrapi
+RUN pip install --no-cache-dir flask yt_dlp instagrapi gunicorn
 
 # Expose port
 EXPOSE 8080
 
 # Run the app
-CMD ["python", "main.py"]
+CMD ["python", "app.py"]
