@@ -7,6 +7,19 @@ from flask import Flask
 import threading
 import subprocess
 
+
+import os
+import subprocess
+
+def install_ffmpeg():
+    if not os.path.exists("/usr/bin/ffmpeg"):
+        print("🔧 Installing FFmpeg...")
+        subprocess.call("apt update && apt install -y ffmpeg", shell=True)
+    else:
+        print("✅ FFmpeg already installed")
+
+install_ffmpeg()
+
 # ========== Configuration ==========
 playlist_url = "https://youtube.com/playlist?list=PLzlOHuvgTpSY4_88tPkqV9BKMt-J2Ivnm&si=zXefeH20MrI7dN6f"
 wait_seconds = 5 * 60 * 60  # 5 hours
