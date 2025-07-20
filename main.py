@@ -1,99 +1,85 @@
 import os
 import time
 import json
-import shutil
-from pytube import Playlist
+from pytube import Playlist, YouTube
 from instagrapi import Client
-import yt_dlp
+from dotenv import load_dotenv
 
-# === SETTINGS ===
-USERNAME = os.environ.get("INSTA_USER")
-PASSWORD = os.environ.get("INSTA_PASS")
-PLAYLIST_URL = os.environ.get("YT_PLAYLIST") or "https://youtube.com/playlist?list=PLzlOHuvgTpSY4_88tPkqV9BKMt-J2Ivnm&si=zXefeH20MrI7dN6f"  # replace with actual default if needed
-SESSION_FILE = "insta_session.json"
-VIDEO_FILE = "reel.mp4"
-THUMBNAIL_FILE = VIDEO_FILE + ".jpg"
-DELAY_MINUTES = 5
+# Load credentials
+load_dotenv()
+USERNAME = os.getenv("IG_USERNAME")
+PASSWORD = os.getenv("IG_PASSWORD")
 
-# === UTILS ===
-def clean_old_files():
-    for file in [VIDEO_FILE, THUMBNAIL_FILE]:
-        if os.path.exists(file):
-            os.remove(file)
+# Setup
+PLAYLIST_URL = "https://youtube.com/playlist?list=PLzlOHuvgTpSY4_88tPkqV9BKMt-J2Ivnm&si=zXefeH20MrI7dN6f"
+DOWNLOAD_DIR = "downloads"
+POSTED_FILE = "posted.json"
 
+# Ensure folders and files exist
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+if not os.path.exists(POSTED_FILE):
+    with open(POSTED_FILE, "w") as f:
+        json.dump([], f)
 
-def download_video(url, output_path=VIDEO_FILE):
-    ydl_opts = {
-        'outtmpl': output_path,
-        'quiet': True,
-        'format': 'mp4/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best',
-        'merge_output_format': 'mp4',
-        'noplaylist': True,
-        'user_agent': 'Mozilla/5.0',
-    }
+def load_posted():
+    with open(POSTED_FILE) as f:
+        return set(json.load(f))
+
+def save_posted(posted_ids):
+    with open(POSTED_FILE, "w") as f:
+        json.dump(list(posted_ids), f)
+
+def download_video(video):
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-        return True
+        yt = YouTube(video.watch_url)
+        stream = yt.streams.filter(file_extension="mp4", progressive=True).order_by("resolution").desc().first()
+        output_path = os.path.join(DOWNLOAD_DIR, yt.title + ".mp4")
+        stream.download(output_path=DOWNLOAD_DIR, filename=yt.title + ".mp4")
+        return output_path, yt.title
     except Exception as e:
-        print(f"❌ Failed to download {url}: {e}")
-        return False
+        print("❌ Download failed:", e)
+        return None, None
 
-
-def upload_to_instagram(video_path, caption, cl):
-    try:
-        print(f"\n🚀 Uploading to Instagram...")
-        cl.clip_upload(video_path, caption=caption)
-        print("✅ Uploaded")
-        return True
-    except Exception as e:
-        print(f"❌ Failed: {caption} — {e}")
-        return False
-
-
-# === MAIN ===
-def main():
+def login_instagram():
     cl = Client()
-    if os.path.exists(SESSION_FILE):
-        try:
-            cl.load_settings(SESSION_FILE)
-            cl.login(USERNAME, PASSWORD)
-        except:
-            print("🔐 Session invalid, re-login required")
-            cl.login(USERNAME, PASSWORD)
-            cl.dump_settings(SESSION_FILE)
-    else:
-        cl.login(USERNAME, PASSWORD)
-        cl.dump_settings(SESSION_FILE)
+    cl.login(USERNAME, PASSWORD)
+    return cl
 
-    uploaded = set()
+def upload_reel(cl, video_path, caption):
+    try:
+        cl.clip_upload(video_path, caption)
+        print(f"✅ Uploaded: {caption}")
+        os.remove(video_path)
+    except Exception as e:
+        print("❌ Upload failed:", e)
 
-    while True:
-        print("\n🔁 Checking playlist...")
-        playlist = Playlist(PLAYLIST_URL)
+# Start
+client = login_instagram()
+posted_ids = load_posted()
+playlist = Playlist(PLAYLIST_URL)
 
-        for video in playlist.videos:
-            title = video.title
-            url = video.watch_url
+print(f"🔁 Total videos in playlist: {len(playlist.video_urls)}")
 
-            if url in uploaded:
-                continue
+while True:
+    for video in playlist.videos:
+        video_id = video.video_id
+        if video_id in posted_ids:
+            print(f"⏭️ Skipping already posted: {video.title}")
+            continue
 
-            print(f"\n📥 Downloading: {title}")
-            clean_old_files()
-            success = download_video(url)
+        print(f"📥 Downloading: {video.title}")
+        video_path, title = download_video(video)
 
-            if success:
-                uploaded.add(url)
-                uploaded.add(video.video_id)
-                upload_to_instagram(VIDEO_FILE, title, cl)
-                clean_old_files()
-            else:
-                print(f"⏩ Skipping due to download failure: {title}")
+        if video_path:
+            print(f"🚀 Uploading: {title}")
+            upload_reel(client, video_path, title)
+            posted_ids.add(video_id)
+            save_posted(posted_ids)
 
-        print(f"⏳ Waiting {DELAY_MINUTES} minutes before checking again...")
-        time.sleep(DELAY_MINUTES * 60)
+            print("⏳ Sleeping 5 hours...")
+            time.sleep(5 * 60 * 60)
+        else:
+            print("❌ Skipping due to download error.")
 
-
-if __name__ == '__main__':
-    main()
+    print("✅ All videos checked. Restarting in 30 minutes.")
+    time.sleep(30 * 60)
