@@ -8,7 +8,7 @@ from flask import Flask
 import threading
 
 # ========== Configuration ==========
-playlist_url = "https://youtube.com/playlist?list=PLGMAm7BxCkldg1axtD4HdzJtjBnWpqE51"
+playlist_url = "https://youtube.com/playlist?list=PLzlOHuvgTpSY4_88tPkqV9BKMt-J2Ivnm&si=zXefeH20MrI7dN6f"
 wait_seconds = 5 * 60 * 60
 output_folder = "downloads"
 video_path = os.path.join(output_folder, "reel.mp4")
